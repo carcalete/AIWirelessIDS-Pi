@@ -74,7 +74,7 @@ def parse_packet(pkt: Packet) -> Optional[Dict[str, Any]]:
     except Exception:
         pass
 
-     # Packet length — use RadioTap len if available, else raw len
+    # Packet length — use raw len (RadioTap included)
     length = len(pkt)
 
     return {
@@ -142,7 +142,8 @@ class WiFiSniffer:
 
 if __name__ == "__main__":
     import time
-    from feature_extraction import extract_features, features_to_vector
+    import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from features.features import extract_features, features_to_vector
 
     logging.basicConfig(level=logging.INFO)
 
