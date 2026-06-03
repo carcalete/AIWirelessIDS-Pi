@@ -1,13 +1,12 @@
 """
-main.py — Orchestrare IDS wireless pe Raspberry Pi
 ===================================================
-Porneste captura, extrage features pe ferestre de timp,
-clasifica traficul si actioneaza la detectia unei intruziuni.
+Starts packet capture, extracts features over time windows,
+classifies traffic and takes action on intrusion detection.
 
-Utilizare:
+Usage:
     sudo python main.py --interface wlan0mon
 
-Optiuni complete:
+Complete options:
     sudo python main.py --interface wlan0mon --window 5 --threshold 0.75 --block
 """
 
@@ -34,18 +33,18 @@ def main(args):
     from response.response import Responder
 
     logger.info("=" * 50)
-    logger.info("  AIWirelessIDS — Pornire sistem")
-    logger.info(f"  Interfata : {args.interface}")
-    logger.info(f"  Fereastra : {args.window}s")
-    logger.info(f"  Prag      : {args.threshold:.0%}")
-    logger.info(f"  Blocare   : {'DA' if args.block else 'NU'}")
+    logger.info("  AIWirelessIDS - Starting system")
+    logger.info(f"  Interface : {args.interface}")
+    logger.info(f"  Window    : {args.window}s")
+    logger.info(f"  Threshold : {args.threshold:.0%}")
+    logger.info(f"  Blocking  : {'YES' if args.block else 'NO'}")
     logger.info("=" * 50)
 
     model_path = Path(args.model)
     if not model_path.exists():
         logger.error(
-            f"Modelul ONNX nu a fost gasit: {model_path}\n"
-            "Ruleaza mai intai:\n"
+            f"Model ONNX not found: {model_path}\n"
+            "Run the following command first:\n"
             f"  python train.py --dataset <awid.csv> --output model/"
         )
         return
@@ -60,7 +59,7 @@ def main(args):
     sniffer = WiFiSniffer(interface=args.interface)
 
     sniffer.start()
-    logger.info("Captura pornita. Apasa Ctrl+C pentru oprire.\n")
+    logger.info("Capture started. Press Ctrl+C to stop.\n")
 
     windows_processed = 0
     alerts_triggered  = 0
@@ -71,7 +70,7 @@ def main(args):
             batch = sniffer.flush()
 
             if not batch:
-                logger.debug("Fereastra goala, astept pachete...")
+                logger.debug("Empty window, waiting for packets...")
                 continue
 
             features = extract_features(batch)
@@ -94,44 +93,44 @@ def main(args):
             )
 
     except KeyboardInterrupt:
-        logger.info("\nOprire solicitata...")
+        logger.info("\nStop requested...")
     finally:
         sniffer.stop()
         if args.block:
             responder.unblock_all()
         logger.info(
-            f"\n=== Sesiune incheiata ==="
-            f"\n  Ferestre procesate : {windows_processed}"
-            f"\n  Alerte generate    : {alerts_triggered}"
+            f"\n=== Session ended ==="
+            f"\n  Windows processed : {windows_processed}"
+            f"\n  Alerts generated    : {alerts_triggered}"
         )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="AI Wireless IDS/IPS — Raspberry Pi"
+        description="AI Wireless IDS/IPS - Raspberry Pi"
     )
     parser.add_argument(
         "--interface", "-i", default="wlan0mon",
-        help="Interfata in monitor mode (default: wlan0mon)",
+        help="Interface in monitor mode (default: wlan0mon)",
     )
     parser.add_argument(
         "--model", "-m", default="model/ids_xgb.onnx",
-        help="Cale model ONNX (default: model/ids_xgb.onnx)",
+        help="Path to ONNX model (default: model/ids_xgb.onnx)",
     )
     parser.add_argument(
         "--window", "-w", type=int, default=5,
-        help="Durata ferestrei de timp in secunde (default: 5)",
+        help="Window duration in seconds (default: 5)",
     )
     parser.add_argument(
         "--threshold", "-t", type=float, default=0.75,
-        help="Prag confidence pentru generare alerta (default: 0.75)",
+        help="Confidence threshold for alert generation (default: 0.75)",
     )
     parser.add_argument(
         "--logs", default="logs/",
-        help="Director pentru fisierele de alerta JSONL (default: logs/)",
+        help="Directory for alert JSONL files (default: logs/)",
     )
     parser.add_argument(
         "--block", action="store_true",
-        help="Blocheaza MAC-urile suspecte via iptables (necesita root, Linux)",
+        help="Block suspicious MAC addresses via iptables (requires root, Linux)",
     )
     main(parser.parse_args())

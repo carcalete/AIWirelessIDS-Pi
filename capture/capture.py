@@ -136,7 +136,7 @@ class WiFiSniffer:
         return batch
     
 # ---------------------------------------------------------------------------
-# Quick local test  (sudo python capture.py)
+# Quick local test  (sudo python3 capture.py)
 # ---------------------------------------------------------------------------
 
 
