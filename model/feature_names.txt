@@ -1,12 +1,3 @@
-total_packets
-deauth_count
-beacon_count
-probe_count
-management_count
-control_count
-data_count
-unique_src_macs
-unique_dst_macs
 avg_packet_length
 avg_inter_arrival_time
 deauth_ratio

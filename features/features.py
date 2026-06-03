@@ -61,8 +61,9 @@ def extract_features(packet_batch: List[Dict[str, Any]]) -> Dict[str, float]:
 
     frame_types = [pkt.get("frame_type", "unknown") for pkt in packet_batch]
     subtypes = [pkt.get("subtype", "other") for pkt in packet_batch]
-    src_macs = [pkt.get("src_mac") for pkt in packet_batch if pkt.get("src_mac")]
-    dst_macs = [pkt.get("dst_mac") for pkt in packet_batch if pkt.get("dst_mac")]
+    # Lowercase MAC-urile pentru a fi identice cu train.py (care aplica .str.lower()).
+    src_macs = [pkt["src_mac"].lower() for pkt in packet_batch if pkt.get("src_mac")]
+    dst_macs = [pkt["dst_mac"].lower() for pkt in packet_batch if pkt.get("dst_mac")]
 
     lengths = []
     for pkt in packet_batch:
@@ -82,12 +83,14 @@ def extract_features(packet_batch: List[Dict[str, Any]]) -> Dict[str, float]:
     type_counter = Counter(frame_types)
     subtype_counter = Counter(subtypes)
 
-    # Sort timestamps to compute inter-arrival times
-    timestamps = [
+    # Sort timestamps to compute inter-arrival times.
+    # Sortarea e obligatorie pentru a fi identic cu train.py (ts_raw.sort_values()):
+    # pachetele pot ajunge usor dezordonate in buffer-ul de captura.
+    timestamps = sorted(
         float(pkt["timestamp"])
         for pkt in packet_batch
         if pkt.get("timestamp") is not None
-    ]
+    )
 
     inter_arrival_times = [
         timestamps[i] - timestamps[i - 1]
@@ -133,7 +136,10 @@ def extract_features(packet_batch: List[Dict[str, Any]]) -> Dict[str, float]:
         "data_ratio": safe_ratio(data_count, total_packets),
     }
 
-    broadcast_mac = "FF:FF:FF:FF:FF:FF"
+    # dst_macs sunt deja lowercase (vezi mai sus) -> comparam cu broadcast lowercase,
+    # exact ca train.py. Inainte, "FF:FF:..." nu se potrivea niciodata cu MAC-urile
+    # lowercase intoarse de scapy, deci broadcast_ratio era mereu 0 live.
+    broadcast_mac = "ff:ff:ff:ff:ff:ff"
     broadcast_count = float(sum(1 for mac in dst_macs if mac == broadcast_mac))
     top_src_count = float(Counter(src_macs).most_common(1)[0][1]) if src_macs else 0.0
 
@@ -147,18 +153,17 @@ def extract_features(packet_batch: List[Dict[str, Any]]) -> Dict[str, float]:
 def features_to_vector(features: Dict[str, float]) -> List[float]:
     """
     Convert a feature dictionary into a model-ready ordered list.
-    Keep this order stable across training and inference.
+
+    Modelul foloseste doar subsetul ROBUST de features (ratios + rate + diversitate
+    + semnal), NU counts absolute de volum — acestea din urma depind de rata de
+    trafic a capturii/mediului si produc multe false positives la schimbarea
+    mediului (train -> test -> live pe Pi). Vezi MODEL_FEATURES din model/train.py.
+
+    ATENTIE: aceasta lista trebuie sa fie IDENTICA (nume + ordine) cu
+    MODEL_FEATURES din model/train.py, altfel modelul primeste features in alta
+    ordine si predictiile sunt gresite fara nicio eroare vizibila.
     """
     feature_order = [
-        "total_packets",
-        "deauth_count",
-        "beacon_count",
-        "probe_count",
-        "management_count",
-        "control_count",
-        "data_count",
-        "unique_src_macs",
-        "unique_dst_macs",
         "avg_packet_length",
         "avg_inter_arrival_time",
         "deauth_ratio",

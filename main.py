@@ -50,7 +50,7 @@ def main(args):
         )
         return
 
-    detector  = Detector(str(model_path))
+    detector  = Detector(str(model_path), threshold=args.threshold)
     responder = Responder(
         threshold=args.threshold,
         log_dir=args.logs,
