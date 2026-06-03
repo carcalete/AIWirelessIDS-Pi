@@ -2,6 +2,10 @@ from collections import Counter
 from statistics import mean
 from typing import Any, Dict, List
 
+# MACs are normalized to lowercase everywhere, identical to train.py
+# (otherwise `broadcast_ratio` and `unique_*_macs` would be different between training and runtime).
+BROADCAST_MAC = "ff:ff:ff:ff:ff:ff"
+
 
 def safe_mean(values: List[float]) -> float:
     """Return the mean of a list, or 0.0 if the list is empty."""
@@ -11,6 +15,13 @@ def safe_mean(values: List[float]) -> float:
 def safe_ratio(numerator: float, denominator: float) -> float:
     """Avoid division by zero when computing ratios."""
     return numerator / denominator if denominator else 0.0
+
+
+def _norm_mac(value: Any) -> str:
+    """Normalize a MAC address to a lowercase string. Returns '' if missing."""
+    if value is None:
+        return ""
+    return str(value).strip().lower()
 
 
 def extract_features(packet_batch: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -61,8 +72,8 @@ def extract_features(packet_batch: List[Dict[str, Any]]) -> Dict[str, float]:
 
     frame_types = [pkt.get("frame_type", "unknown") for pkt in packet_batch]
     subtypes = [pkt.get("subtype", "other") for pkt in packet_batch]
-    src_macs = [pkt.get("src_mac") for pkt in packet_batch if pkt.get("src_mac")]
-    dst_macs = [pkt.get("dst_mac") for pkt in packet_batch if pkt.get("dst_mac")]
+    src_macs = [m for m in (_norm_mac(pkt.get("src_mac")) for pkt in packet_batch) if m]
+    dst_macs = [m for m in (_norm_mac(pkt.get("dst_mac")) for pkt in packet_batch) if m]
 
     lengths = []
     for pkt in packet_batch:
@@ -133,8 +144,7 @@ def extract_features(packet_batch: List[Dict[str, Any]]) -> Dict[str, float]:
         "data_ratio": safe_ratio(data_count, total_packets),
     }
 
-    broadcast_mac = "FF:FF:FF:FF:FF:FF"
-    broadcast_count = float(sum(1 for mac in dst_macs if mac == broadcast_mac))
+    broadcast_count = float(sum(1 for mac in dst_macs if mac == BROADCAST_MAC))
     top_src_count = float(Counter(src_macs).most_common(1)[0][1]) if src_macs else 0.0
 
     features["broadcast_ratio"] = safe_ratio(broadcast_count, total_packets)
@@ -174,55 +184,3 @@ def features_to_vector(features: Dict[str, float]) -> List[float]:
     ]
 
     return [features[name] for name in feature_order]
-
-
-if __name__ == "__main__":
-    # Quick local test with fake packets
-    sample_packets = [
-        {
-            "frame_type": "management",
-            "subtype": "deauth",
-            "src_mac": "AA:AA:AA:AA:AA:01",
-            "dst_mac": "FF:FF:FF:FF:FF:FF",
-            "length": 64,
-            "timestamp": 1.00,
-            "rssi": -45,
-        },
-        {
-            "frame_type": "management",
-            "subtype": "deauth",
-            "src_mac": "AA:AA:AA:AA:AA:01",
-            "dst_mac": "FF:FF:FF:FF:FF:FF",
-            "length": 64,
-            "timestamp": 1.05,
-            "rssi": -46,
-        },
-        {
-            "frame_type": "management",
-            "subtype": "beacon",
-            "src_mac": "BB:BB:BB:BB:BB:02",
-            "dst_mac": "FF:FF:FF:FF:FF:FF",
-            "length": 128,
-            "timestamp": 1.10,
-            "rssi": -60,
-        },
-        {
-            "frame_type": "data",
-            "subtype": "other",
-            "src_mac": "CC:CC:CC:CC:CC:03",
-            "dst_mac": "DD:DD:DD:DD:DD:04",
-            "length": 512,
-            "timestamp": 1.30,
-            "rssi": -52,
-        },
-    ]
-
-    extracted = extract_features(sample_packets)
-    vector = features_to_vector(extracted)
-
-    print("Extracted features:")
-    for key, value in extracted.items():
-        print(f"{key}: {value}")
-
-    print("\nFeature vector:")
-    print(vector)

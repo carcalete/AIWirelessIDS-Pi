@@ -9,16 +9,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 def main(args):
-    logger.info(f"Incarcare: {args.dataset}")
+    logger.info(f"Evaluating model on: {args.dataset}")
     df = pd.read_csv(args.dataset, header=None, na_values=["?","","  "], low_memory=False)
-    logger.info(f"  → {df.shape[0]:,} pachete")
-    logger.info(f"  → Distributie label:\n{df.iloc[:, COL_LABEL].value_counts().to_string()}")
+    logger.info(f"  → {df.shape[0]:,} packets")
+    logger.info(f"  → Label distribution:\n{df.iloc[:, COL_LABEL].value_counts().to_string()}")
 
     win = args.window_packets
     df["_win"] = np.arange(len(df)) // win
-    logger.info(f"Grupare in ferestre de {win} pachete → {df['_win'].nunique():,} ferestre")
+    logger.info(f"Grouping into windows of {win} packets → {df['_win'].nunique():,} windows")
 
-    logger.info("Extragere features...")
+    logger.info("Extracting features...")
     X_df = df.groupby("_win", sort=True).apply(compute_window_features)
     y = (
         df.groupby("_win")[df.columns[COL_LABEL]]
@@ -38,7 +38,7 @@ def main(args):
     y_prob = outputs[1][:, 1]
 
     from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, f1_score
-    logger.info(f"\n{'='*50}\nRezultate pe {Path(args.dataset).name}\n{'='*50}")
+    logger.info(f"\n{'='*50}\nResults on {Path(args.dataset).name}\n{'='*50}")
     logger.info(f"\n{classification_report(y, y_pred, target_names=['normal','abnormal'])}")
 
     cm = confusion_matrix(y, y_pred)
