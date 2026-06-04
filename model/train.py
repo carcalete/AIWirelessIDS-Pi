@@ -216,6 +216,31 @@ def main(args):
     X = X_df[MODEL_FEATURES].values.astype(np.float32)
     logger.info(f"  → {len(MODEL_FEATURES)} features model: {', '.join(MODEL_FEATURES)}")
 
+    # 4b. Calibrare (domain adaptation): adauga ferestre NORMALE din mediul local.
+    # AWID2 e un testbed din 2015; mediul real are alt profil de trafic (ex. multe
+    # beacon-uri) pe care modelul il confunda cu impersonation -> false positives.
+    # Adaugand trafic normal local ca 'normal' (cu greutate mai mare), modelul invata
+    # cum arata "normal" la TINE, fara sa piarda detectia de atac. Randurile sunt deja
+    # in formatul celor 12 MODEL_FEATURES (produse de calibrate.py / features_to_vector).
+    sample_weight = np.ones(len(X), dtype=np.float32)
+    if args.calibration_csv:
+        cal = pd.read_csv(args.calibration_csv, header=None).values.astype(np.float32)
+        if cal.shape[1] != len(MODEL_FEATURES):
+            raise ValueError(
+                f"--calibration-csv are {cal.shape[1]} coloane, astept {len(MODEL_FEATURES)} "
+                f"(cele 12 MODEL_FEATURES). Regenereaza cu calibrate.py."
+            )
+        X = np.vstack([X, cal])
+        y = np.concatenate([y, np.zeros(len(cal), dtype=y.dtype)])
+        sample_weight = np.concatenate([
+            sample_weight,
+            np.full(len(cal), args.calibration_weight, dtype=np.float32),
+        ])
+        logger.info(
+            f"  → +{len(cal)} ferestre normale de calibrare (mediu local), "
+            f"greutate {args.calibration_weight}x/fereastra"
+        )
+
     n_normal   = int(np.sum(y == 0))
     n_abnormal = int(np.sum(y == 1))
     logger.info(f"  → normal={n_normal:,}  abnormal={n_abnormal:,}  ratio={n_normal/max(n_abnormal,1):.1f}:1")
@@ -224,10 +249,10 @@ def main(args):
         logger.error("Nicio fereastra abnormal detectata. Verifica pozitia coloanei label.")
         return
 
-    # 5. Train/test split
+    # 5. Train/test split (ducem si sample_weight prin split)
     from sklearn.model_selection import train_test_split, cross_val_score
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+    X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
+        X, y, sample_weight, test_size=0.2, random_state=42, stratify=y
     )
     logger.info(f"Train: {len(X_train):,}  |  Test: {len(X_test):,}")
 
@@ -253,7 +278,7 @@ def main(args):
         random_state=42,
         n_jobs=-1,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=w_train)
 
     # 7. Evaluare
     from sklearn.metrics import classification_report, roc_auc_score
@@ -319,4 +344,8 @@ if __name__ == "__main__":
                         help="Durata ferestrei de timp in secunde (default: 5, ca main.py)")
     parser.add_argument("--min-attack-packets", default=1, type=int,
                         help="Prag intensitate: fereastra = atac daca are ≥ N pachete de atac (default: 1)")
+    parser.add_argument("--calibration-csv", default=None,
+                        help="CSV cu ferestre normale locale (12 coloane, din calibrate.py) adaugate ca 'normal'")
+    parser.add_argument("--calibration-weight", default=5.0, type=float,
+                        help="Greutatea fiecarei ferestre de calibrare in antrenare (default: 5)")
     main(parser.parse_args())
