@@ -36,8 +36,11 @@ def main(args):
     logger.info(
         f"Captura NORMALA pe {args.interface}, {args.minutes} min, fereastra {args.window}s.\n"
         f"!!! NU rula niciun atac acum — trebuie trafic curat !!!"
+        if args.label == "normal" else
+        f">>> Capturezi exemple de ATAC. Lanseaza atacul ACUM si tine-l pornit <<<"
     )
 
+    is_attack = args.label == "attack"
     rows = []
     skipped = 0
     end = time.time() + args.minutes * 60
@@ -48,8 +51,9 @@ def main(args):
             if not batch:
                 continue
             feats = extract_features(batch)
-            # Garda: daca pare atac (multe deauth), NU-l salva ca normal.
-            if feats.get("deauth_count", 0) > args.max_deauth:
+            # La label=normal: garda care sare ferestrele ce par atac (multe deauth).
+            # La label=attack: capturam TOT (inclusiv deauth-uri).
+            if not is_attack and feats.get("deauth_count", 0) > args.max_deauth:
                 skipped += 1
                 logger.warning(
                     f"  fereastra cu deauth={feats['deauth_count']:.0f} sarita "
@@ -58,7 +62,7 @@ def main(args):
                 continue
             rows.append(features_to_vector(feats))
             logger.info(
-                f"  [{len(rows):3d}] fereastra normala  "
+                f"  [{len(rows):3d}] fereastra {args.label.upper():7s} "
                 f"(pkt={len(batch)}, beacon={feats['beacon_count']:.0f}, "
                 f"deauth={feats['deauth_count']:.0f})"
             )
@@ -73,14 +77,13 @@ def main(args):
 
     with open(args.output, "w", newline="") as f:
         csv.writer(f).writerows(rows)
+    flag = "--attack-csv" if is_attack else "--calibration-csv"
     logger.info(
-        f"✓ Salvat {len(rows)} ferestre normale in {args.output} "
-        f"({skipped} sarite ca posibil atac)."
+        f"✓ Salvat {len(rows)} ferestre [{args.label}] in {args.output} "
+        f"({skipped} sarite)."
     )
     logger.info(
-        "Acum reantreneaza pe PC cu:\n"
-        f"  python model/train.py --dataset <awid_trn> --output model/ "
-        f"--min-attack-packets 5 --calibration-csv {args.output}"
+        f"Reantreneaza pe PC adaugand: {flag} {args.output}"
     )
 
 
@@ -90,6 +93,8 @@ if __name__ == "__main__":
     p.add_argument("--minutes", type=float, default=5.0, help="Durata capturii in minute (default: 5)")
     p.add_argument("--window", "-w", type=int, default=5, help="Fereastra in secunde (default: 5, ca main.py)")
     p.add_argument("--output", "-o", default="model/calib_normal.csv", help="CSV de iesire")
+    p.add_argument("--label", choices=["normal", "attack"], default="normal",
+                   help="Eticheta capturii: 'normal' (trafic curat) sau 'attack' (lansezi atacul in timpul capturii)")
     p.add_argument("--max-deauth", type=int, default=10,
-                   help="Sare ferestrele cu mai multe deauth de atat (posibil atac)")
+                   help="La label=normal: sare ferestrele cu mai multe deauth (posibil atac)")
     main(p.parse_args())

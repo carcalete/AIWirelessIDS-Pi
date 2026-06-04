@@ -241,6 +241,28 @@ def main(args):
             f"greutate {args.calibration_weight}x/fereastra"
         )
 
+    # 4c. Exemple de ATAC locale: invata modelul semnaturi de atac capturate cu
+    # uneltele reale (auth flood, beacon flood, deauth, evil twin) prin
+    # `calibrate.py --label attack`. Necesar fiindca AWID2 nu acopera bine toate
+    # tipurile, iar calibrarea (normalul) le poate masca pe cele bazate pe beacon.
+    if args.attack_csv:
+        atk = pd.read_csv(args.attack_csv, header=None).values.astype(np.float32)
+        if atk.shape[1] != len(MODEL_FEATURES):
+            raise ValueError(
+                f"--attack-csv are {atk.shape[1]} coloane, astept {len(MODEL_FEATURES)} "
+                f"(cele 12 MODEL_FEATURES). Regenereaza cu calibrate.py --label attack."
+            )
+        X = np.vstack([X, atk])
+        y = np.concatenate([y, np.ones(len(atk), dtype=y.dtype)])
+        sample_weight = np.concatenate([
+            sample_weight,
+            np.full(len(atk), args.attack_weight, dtype=np.float32),
+        ])
+        logger.info(
+            f"  → +{len(atk)} ferestre de ATAC locale, "
+            f"greutate {args.attack_weight}x/fereastra"
+        )
+
     n_normal   = int(np.sum(y == 0))
     n_abnormal = int(np.sum(y == 1))
     logger.info(f"  → normal={n_normal:,}  abnormal={n_abnormal:,}  ratio={n_normal/max(n_abnormal,1):.1f}:1")
@@ -348,4 +370,8 @@ if __name__ == "__main__":
                         help="CSV cu ferestre normale locale (12 coloane, din calibrate.py) adaugate ca 'normal'")
     parser.add_argument("--calibration-weight", default=3.0, type=float,
                         help="Greutatea fiecarei ferestre de calibrare in antrenare (default: 3)")
+    parser.add_argument("--attack-csv", default=None,
+                        help="CSV cu ferestre de ATAC locale (12 coloane, din calibrate.py --label attack)")
+    parser.add_argument("--attack-weight", default=3.0, type=float,
+                        help="Greutatea fiecarei ferestre de atac local in antrenare (default: 3)")
     main(parser.parse_args())
