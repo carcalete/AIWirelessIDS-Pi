@@ -346,6 +346,6 @@ if __name__ == "__main__":
                         help="Prag intensitate: fereastra = atac daca are ≥ N pachete de atac (default: 1)")
     parser.add_argument("--calibration-csv", default=None,
                         help="CSV cu ferestre normale locale (12 coloane, din calibrate.py) adaugate ca 'normal'")
-    parser.add_argument("--calibration-weight", default=5.0, type=float,
-                        help="Greutatea fiecarei ferestre de calibrare in antrenare (default: 5)")
+    parser.add_argument("--calibration-weight", default=3.0, type=float,
+                        help="Greutatea fiecarei ferestre de calibrare in antrenare (default: 3)")
     main(parser.parse_args())
