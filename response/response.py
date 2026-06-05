@@ -1,9 +1,13 @@
 """
-response.py — Modul de raspuns la intruziuni detectate.
+response.py — Modul de raspuns la intruziuni detectate (raspuns gradat).
 
-Actiuni disponibile:
-  - Logare alerta (intotdeauna activa) in consola si fisier JSONL zilnic
-  - Blocare MAC via iptables (Linux/Pi, necesita root, --block)
+Niveluri de raspuns:
+  - Nivel 1 ALERTARE (mereu): consola + fisier JSONL zilnic.
+  - Nivel 2 CONTAINMENT evil twin / rogue AP: injecteaza deauth catre BSSID-ul fals
+    (clientii pleaca de pe AP-ul atacatorului). SIGUR prin whitelist (--protect):
+    nu atinge niciodata un AP legitim. Functioneaza fiindca atacatorul are un BSSID
+    REAL, targetabil (spre deosebire de deauth flood, care e spoofed -> doar alerta).
+  - Nivel 3 BLOCARE MAC inline via iptables (--block): real doar daca Pi e gateway/AP.
 """
 
 import json
@@ -22,7 +26,8 @@ class Responder:
     Interpreteaza rezultatul detectiei si actioneaza corespunzator.
 
     Usage:
-        responder = Responder(threshold=0.75, log_dir="logs/")
+        responder = Responder(threshold=0.75, log_dir="logs/", protect=["gilbert:aa:bb:..."])
+        responder.check_rogue_aps(packet_batch)            # containment evil twin
         triggered = responder.handle(label, confidence, features, packet_batch)
     """
 
@@ -32,15 +37,78 @@ class Responder:
         log_dir: Optional[str] = "logs/",
         block_enabled: bool = False,
         interface: Optional[str] = None,
+        protect: Optional[List[str]] = None,
     ):
         self.threshold     = threshold
         self.block_enabled = block_enabled
         self.interface     = interface
         self._blocked: set = set()
+        self._contained: set = set()
+
+        # Whitelist AP-uri legitime: { ssid_lower: {bssid_lower, ...} }.
+        # Format intrare: "SSID:BSSID" (ex. "gilbert:4a:7a:35:f4:da:71").
+        # Containment-ul se face DOAR pentru SSID-uri protejate cu BSSID NEcunoscut.
+        self._protect: Dict[str, set] = {}
+        for entry in (protect or []):
+            if ":" not in entry:
+                logger.warning(f"--protect ignora '{entry}' (format: SSID:BSSID)")
+                continue
+            ssid, bssid = entry.split(":", 1)
+            self._protect.setdefault(ssid.lower(), set()).add(bssid.lower())
+        if self._protect:
+            logger.info(f"Containment evil twin activ pentru: {dict((k, list(v)) for k,v in self._protect.items())}")
 
         self._log_dir = Path(log_dir) if log_dir else None
         if self._log_dir:
             self._log_dir.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Nivel 2 — Containment evil twin / rogue AP
+    # ------------------------------------------------------------------
+
+    def check_rogue_aps(self, packet_batch: list) -> List[str]:
+        """
+        Detecteaza evil twin (regula): un beacon cu un SSID PROTEJAT dar un BSSID care
+        NU e cel legitim -> e un AP fals care imita reteaua ta. Il contine prin deauth.
+        Niciodata nu atinge un BSSID din whitelist. Ruleaza la fiecare fereastra.
+        """
+        if not self._protect:
+            return []
+        contained = []
+        for pkt in packet_batch:
+            ssid = (pkt.get("ssid") or "").lower()
+            bssid = (pkt.get("bssid") or "").lower()
+            if not ssid or ssid not in self._protect or not bssid:
+                continue
+            legit = self._protect[ssid]
+            if bssid in legit:
+                continue                       # AP legitim -> niciodata atins
+            if bssid in self._contained:
+                continue                       # deja tratat
+            self._contain_rogue(bssid, ssid)
+            contained.append(bssid)
+        return contained
+
+    def _contain_rogue(self, bssid: str, ssid: str):
+        """
+        Trimite cadre deauth catre BSSID-ul rogue (broadcast, spoofing BSSID-ul fals)
+        -> clientii conectati la evil twin se deconecteaza de pe el.
+        """
+        self._contained.add(bssid)
+        logger.warning(f"[CONTAIN] Evil twin '{ssid}' BSSID={bssid} — trimit deauth de containment")
+        if not self.interface:
+            logger.error("[CONTAIN] interfata lipseste, nu pot injecta.")
+            return
+        try:
+            from scapy.all import RadioTap, sendp
+            from scapy.layers.dot11 import Dot11, Dot11Deauth
+            pkt = (RadioTap() /
+                   Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=bssid, addr3=bssid) /
+                   Dot11Deauth(reason=7))
+            sendp(pkt, iface=self.interface, count=10, inter=0.1, verbose=False)
+            logger.warning(f"[CONTAIN] {bssid} — 10 cadre deauth trimise.")
+        except Exception as e:
+            logger.error(f"[CONTAIN] Esec injectare catre {bssid}: {e}")
 
     # ------------------------------------------------------------------
     # API public

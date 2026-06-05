@@ -55,6 +55,7 @@ def main(args):
         log_dir=args.logs,
         block_enabled=args.block,
         interface=args.interface,
+        protect=args.protect,
     )
     sniffer = WiFiSniffer(interface=args.interface)
 
@@ -78,6 +79,9 @@ def main(args):
             label, confidence = detector.predict(vector)
 
             windows_processed += 1
+            # Nivel 2: containment evil twin (regula, ruleaza la fiecare fereastra)
+            responder.check_rogue_aps(batch)
+            # Nivel 1/3: alerta + (block inline) pe detectia ML de flood
             triggered = responder.handle(label, confidence, features, batch)
             if triggered:
                 alerts_triggered += 1
@@ -132,5 +136,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--block", action="store_true",
         help="Block suspicious MAC addresses via iptables (requires root, Linux)",
+    )
+    parser.add_argument(
+        "--protect", action="append", default=[], metavar="SSID:BSSID",
+        help="AP legitim de protejat (whitelist). Orice alt BSSID pe acest SSID = evil twin "
+             "-> containment prin deauth. Se poate repeta. Ex: --protect gilbert:4a:7a:35:f4:da:71",
     )
     main(parser.parse_args())

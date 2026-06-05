@@ -10,6 +10,7 @@ from scapy.layers.dot11 import (
     Dot11Beacon,
     Dot11Deauth,
     Dot11Disas,
+    Dot11Elt,
     Dot11ProbeReq,
     Dot11ProbeResp,
 )
@@ -77,6 +78,21 @@ def parse_packet(pkt: Packet) -> Optional[Dict[str, Any]]:
     # Packet length — use raw len (RadioTap included)
     length = len(pkt)
 
+    # SSID + BSSID — doar pentru beacon/probe-resp, folosite la detectia evil twin.
+    # BSSID = addr3 (identitatea AP-ului); SSID = primul element Dot11Elt (ID 0).
+    ssid = None
+    bssid = dot11.addr3 or None
+    if pkt.haslayer(Dot11Beacon) or pkt.haslayer(Dot11ProbeResp):
+        elt = pkt.getlayer(Dot11Elt)
+        while elt is not None:
+            if elt.ID == 0:  # 0 = SSID element
+                try:
+                    ssid = elt.info.decode(errors="ignore")
+                except Exception:
+                    ssid = None
+                break
+            elt = elt.payload.getlayer(Dot11Elt)
+
     return {
         "frame_type": frame_type,
         "subtype":    subtype,
@@ -85,6 +101,8 @@ def parse_packet(pkt: Packet) -> Optional[Dict[str, Any]]:
         "length":     length,
         "timestamp":  float(pkt.time),
         "rssi":       rssi,
+        "ssid":       ssid,                 # numele retelei (doar beacon/probe-resp)
+        "bssid":      bssid,                # identitatea AP-ului (addr3)
     }
 
 # ---------------------------------------------------------------------------
