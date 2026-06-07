@@ -38,10 +38,14 @@ class Responder:
         block_enabled: bool = False,
         interface: Optional[str] = None,
         protect: Optional[List[str]] = None,
+        beacon_flood_threshold: int = 50,
+        auth_flood_threshold: int = 50,
     ):
         self.threshold     = threshold
         self.block_enabled = block_enabled
         self.interface     = interface
+        self.beacon_flood_threshold = beacon_flood_threshold
+        self.auth_flood_threshold   = auth_flood_threshold
         self._blocked: set = set()
         self._contained: set = set()
 
@@ -109,6 +113,56 @@ class Responder:
             logger.warning(f"[CONTAIN] {bssid} — 10 cadre deauth trimise.")
         except Exception as e:
             logger.error(f"[CONTAIN] Esec injectare catre {bssid}: {e}")
+
+    # ------------------------------------------------------------------
+    # Detectie pe REGULI (atacuri pe care AI-ul nu le poate prinde fara FP)
+    # ------------------------------------------------------------------
+
+    def check_flood_rules(self, packet_batch: list) -> List[str]:
+        """
+        Detectie pe reguli pentru atacuri cu semnatura neambigua, independenta de mediu:
+          - Beacon flood: prea multe BSSID-uri UNICE (AP-uri false) intr-o fereastra.
+            Un mediu normal are zeci de AP-uri; un flood creeaza sute de MAC-uri random.
+          - Auth flood: prea multe cadre de autentificare intr-o fereastra (DoS pe AP).
+        Aceste semnale se suprapun cu trafic normal beacon-heavy in spatiul ML (-> FP),
+        de aceea sunt tratate cu praguri pe numere brute, nu de model.
+        Sunt spoofed / MAC-uri random -> raspuns = ALERTA (nu containment).
+        """
+        detected = []
+
+        beacon_bssids = {
+            (p.get("bssid") or "").lower()
+            for p in packet_batch
+            if p.get("subtype") == "beacon" and p.get("bssid")
+        }
+        if len(beacon_bssids) >= self.beacon_flood_threshold:
+            logger.warning(
+                f"[ALERT] Beacon flood detectat (regula) | "
+                f"{len(beacon_bssids)} BSSID-uri unice >= prag {self.beacon_flood_threshold}"
+            )
+            self._log_rule_alert("beacon_flood", {"unique_bssids": len(beacon_bssids)})
+            detected.append("beacon_flood")
+
+        auth_count = sum(1 for p in packet_batch if p.get("subtype") == "auth")
+        if auth_count >= self.auth_flood_threshold:
+            logger.warning(
+                f"[ALERT] Auth flood detectat (regula) | "
+                f"{auth_count} cadre auth >= prag {self.auth_flood_threshold}"
+            )
+            self._log_rule_alert("auth_flood", {"auth_frames": auth_count})
+            detected.append("auth_flood")
+
+        return detected
+
+    def _log_rule_alert(self, attack: str, details: dict):
+        if not self._log_dir:
+            return
+        ts = datetime.now()
+        entry = {"timestamp": ts.isoformat(), "detector": "rule",
+                 "attack": attack, "details": details}
+        log_file = self._log_dir / f"alerts_{ts.strftime('%Y%m%d')}.jsonl"
+        with open(log_file, "a") as f:
+            f.write(json.dumps(entry) + "\n")
 
     # ------------------------------------------------------------------
     # API public

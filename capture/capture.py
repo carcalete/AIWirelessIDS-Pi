@@ -29,7 +29,7 @@ SUBTYPE_MAP = {
     Dot11ProbeResp: ("management", "probe"),
     Dot11AssoReq:   ("management", "other"),
     Dot11AssoResp:  ("management", "other"),
-    Dot11Auth:      ("management", "other"),
+    Dot11Auth:      ("management", "auth"),     # subtip distinct pt regula auth flood
 }
 
 def _get_frame_type_and_subtype(pkt: Packet):

@@ -56,6 +56,8 @@ def main(args):
         block_enabled=args.block,
         interface=args.interface,
         protect=args.protect,
+        beacon_flood_threshold=args.beacon_flood_threshold,
+        auth_flood_threshold=args.auth_flood_threshold,
     )
     sniffer = WiFiSniffer(interface=args.interface)
 
@@ -79,11 +81,12 @@ def main(args):
             label, confidence = detector.predict(vector)
 
             windows_processed += 1
-            # Nivel 2: containment evil twin (regula, ruleaza la fiecare fereastra)
-            responder.check_rogue_aps(batch)
-            # Nivel 1/3: alerta + (block inline) pe detectia ML de flood
+            # Detectie pe REGULI (independenta de mediu): beacon/auth flood + evil twin
+            responder.check_rogue_aps(batch)              # evil twin -> containment
+            rule_hits = responder.check_flood_rules(batch)  # beacon/auth flood -> alerta
+            # Detectie AI: deauth/flooding -> alerta + (block inline)
             triggered = responder.handle(label, confidence, features, batch)
-            if triggered:
+            if triggered or rule_hits:
                 alerts_triggered += 1
 
             logger.info(
@@ -141,5 +144,13 @@ if __name__ == "__main__":
         "--protect", action="append", default=[], metavar="SSID:BSSID",
         help="AP legitim de protejat (whitelist). Orice alt BSSID pe acest SSID = evil twin "
              "-> containment prin deauth. Se poate repeta. Ex: --protect gilbert:4a:7a:35:f4:da:71",
+    )
+    parser.add_argument(
+        "--beacon-flood-threshold", type=int, default=50,
+        help="Beacon flood: nr minim de BSSID-uri unice/fereastra (default: 50)",
+    )
+    parser.add_argument(
+        "--auth-flood-threshold", type=int, default=50,
+        help="Auth flood: nr minim de cadre auth/fereastra (default: 50)",
     )
     main(parser.parse_args())
