@@ -155,7 +155,7 @@ def features_to_vector(features: Dict[str, float]) -> List[float]:
     Convert a feature dictionary into a model-ready ordered list.
 
     Modelul foloseste doar subsetul ROBUST de features (ratios + rate + diversitate
-    + semnal), NU counts absolute de volum — acestea din urma depind de rata de
+    + semnal), NU counts absolute de volum - acestea din urma depind de rata de
     trafic a capturii/mediului si produc multe false positives la schimbarea
     mediului (train -> test -> live pe Pi). Vezi MODEL_FEATURES din model/train.py.
 

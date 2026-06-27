@@ -1,5 +1,4 @@
 """
-===================================================
 Starts packet capture, extracts features over time windows,
 classifies traffic and takes action on intrusion detection.
 

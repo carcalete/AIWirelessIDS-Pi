@@ -1,7 +1,7 @@
 """
-train.py — Antrenare model IDS pe features per-fereastra de timp (AWID2)
-=========================================================================
-Genereaza features compatibile cu features/features.py (21 features per window).
+train.py - Antrenare model IDS pe features per-fereastra de timp (AWID2)
+Calculeaza features identic cu features/features.py: 21 brute per fereastra,
+din care modelul foloseste subsetul robust de 12 (vezi MODEL_FEATURES).
 
 Utilizare:
     python train.py --dataset path/to/awid.csv --output model/
@@ -24,9 +24,7 @@ warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
 # Pozitii coloane AWID2 (confirmate experimental din dataset)
-# ---------------------------------------------------------------------------
 COL_TIMESTAMP  = 3    # frame.time_epoch
 COL_FRAME_TYPE = 65   # wlan.fc.type: 0=management, 1=control, 2=data
 COL_SUBTYPE    = 66   # wlan.fc.subtype: 8=beacon, 12=deauth, 10=disassoc, 4/5=probe
@@ -69,14 +67,13 @@ MODEL_FEATURES = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Extragere features per fereastra (vectorizat, compatibil cu features.py)
-# ---------------------------------------------------------------------------
 
 def compute_window_features(group: pd.DataFrame) -> pd.Series:
     """
-    Calculeaza cei 21 features pentru o fereastra de pachete.
-    Rezultatul este identic cu features_to_vector() din features/features.py.
+    Calculeaza cele 21 de features brute pentru o fereastra, identic cu
+    extract_features() din features/features.py. Modelul foloseste apoi doar
+    subsetul de 12 (MODEL_FEATURES), selectat in main().
     """
     n = len(group)
 
@@ -126,9 +123,7 @@ def compute_window_features(group: pd.DataFrame) -> pd.Series:
     ], index=FEATURE_NAMES)
 
 
-# ---------------------------------------------------------------------------
 # Ferestre de timp (identic cu pipeline-ul live din main.py)
-# ---------------------------------------------------------------------------
 
 def assign_time_windows(df: pd.DataFrame, window_seconds: float) -> pd.Series:
     """
@@ -174,9 +169,7 @@ def window_labels(df: pd.DataFrame, min_attack_packets: int = 1) -> np.ndarray:
     return (counts >= min_attack_packets).astype(int).values
 
 
-# ---------------------------------------------------------------------------
 # Pipeline principal
-# ---------------------------------------------------------------------------
 
 def main(args):
     np.random.seed(42)
@@ -191,10 +184,10 @@ def main(args):
         na_values=["?", "", " "],
         low_memory=False,
     )
-    logger.info(f"  → {df.shape[0]:,} pachete, {df.shape[1]} coloane")
+    logger.info(f"  -> {df.shape[0]:,} pachete, {df.shape[1]} coloane")
 
     label_counts = df.iloc[:, COL_LABEL].value_counts()
-    logger.info(f"  → Distributie label:\n{label_counts.to_string()}")
+    logger.info(f"  -> Distributie label:\n{label_counts.to_string()}")
 
     # 2. Grupare in ferestre de TIMP (identic cu main.py / inferenta live)
     win = args.window_seconds
@@ -202,19 +195,19 @@ def main(args):
     df["_win"] = assign_time_windows(df, win)
 
     n_windows = df["_win"].nunique()
-    logger.info(f"  → {n_windows:,} ferestre")
+    logger.info(f"  -> {n_windows:,} ferestre")
 
     # 3. Extragere features per fereastra
     logger.info("Extragere features (vectorizat)...")
     X_df = df.groupby("_win", sort=True).apply(compute_window_features)
 
-    # 4. Etichete per fereastra (prag de intensitate: ≥ min_attack_packets)
+    # 4. Etichete per fereastra (prag de intensitate: >= min_attack_packets)
     y = window_labels(df, args.min_attack_packets)
-    logger.info(f"  → eticheta abnormal daca ≥{args.min_attack_packets} pachete de atac/fereastra")
+    logger.info(f"  -> eticheta abnormal daca >={args.min_attack_packets} pachete de atac/fereastra")
 
     # Modelul foloseste doar subsetul robust de features (vezi MODEL_FEATURES).
     X = X_df[MODEL_FEATURES].values.astype(np.float32)
-    logger.info(f"  → {len(MODEL_FEATURES)} features model: {', '.join(MODEL_FEATURES)}")
+    logger.info(f"  -> {len(MODEL_FEATURES)} features model: {', '.join(MODEL_FEATURES)}")
 
     # 4b. Calibrare (domain adaptation): adauga ferestre NORMALE din mediul local.
     # AWID2 e un testbed din 2015; mediul real are alt profil de trafic (ex. multe
@@ -237,7 +230,7 @@ def main(args):
             np.full(len(cal), args.calibration_weight, dtype=np.float32),
         ])
         logger.info(
-            f"  → +{len(cal)} ferestre normale de calibrare (mediu local), "
+            f"  -> +{len(cal)} ferestre normale de calibrare (mediu local), "
             f"greutate {args.calibration_weight}x/fereastra"
         )
 
@@ -259,13 +252,13 @@ def main(args):
             np.full(len(atk), args.attack_weight, dtype=np.float32),
         ])
         logger.info(
-            f"  → +{len(atk)} ferestre de ATAC locale, "
+            f"  -> +{len(atk)} ferestre de ATAC locale, "
             f"greutate {args.attack_weight}x/fereastra"
         )
 
     n_normal   = int(np.sum(y == 0))
     n_abnormal = int(np.sum(y == 1))
-    logger.info(f"  → normal={n_normal:,}  abnormal={n_abnormal:,}  ratio={n_normal/max(n_abnormal,1):.1f}:1")
+    logger.info(f"  -> normal={n_normal:,}  abnormal={n_abnormal:,}  ratio={n_normal/max(n_abnormal,1):.1f}:1")
 
     if n_abnormal == 0:
         logger.error("Nicio fereastra abnormal detectata. Verifica pozitia coloanei label.")
@@ -312,7 +305,7 @@ def main(args):
     except Exception:
         pass
 
-    # 7b. Importanta features (gain) — utila pentru analiza din lucrare
+    # 7b. Importanta features (gain) - utila pentru analiza din lucrare
     importances = sorted(
         zip(MODEL_FEATURES, model.feature_importances_),
         key=lambda kv: kv[1], reverse=True,
@@ -324,7 +317,7 @@ def main(args):
     # 8. Cross-validare 5-fold
     logger.info("Cross-validare 5-fold...")
     cv = cross_val_score(model, X, y, cv=5, scoring="f1", n_jobs=-1)
-    logger.info(f"  F1 CV: {cv.mean():.4f} ± {cv.std():.4f}")
+    logger.info(f"  F1 CV: {cv.mean():.4f} +/- {cv.std():.4f}")
 
     # 9. Export ONNX
     logger.info("Export ONNX...")
@@ -338,22 +331,22 @@ def main(args):
         onnx_path = str(output_dir / "ids_xgb.onnx")
         with open(onnx_path, "wb") as f:
             f.write(onnx_model.SerializeToString())
-        logger.info(f"  → ONNX salvat: {onnx_path} ({os.path.getsize(onnx_path)/1024:.1f} KB)")
+        logger.info(f"  -> ONNX salvat: {onnx_path} ({os.path.getsize(onnx_path)/1024:.1f} KB)")
     except Exception as e:
         logger.warning(f"  Export ONNX esuat ({e}), salvare pickle fallback.")
         import pickle
         pkl_path = str(output_dir / "ids_xgb.pkl")
         with open(pkl_path, "wb") as f:
             pickle.dump(model, f)
-        logger.info(f"  → Pickle salvat: {pkl_path}")
+        logger.info(f"  -> Pickle salvat: {pkl_path}")
 
     # 10. Salveaza lista de features a MODELULUI (ordinea vectorului de intrare)
     names_path = str(output_dir / "feature_names.txt")
     with open(names_path, "w") as f:
         f.write("\n".join(MODEL_FEATURES))
-    logger.info(f"  → Features salvate: {names_path}")
+    logger.info(f"  -> Features salvate: {names_path}")
 
-    logger.info(f"\n✓ Antrenare completa. Modele in: {output_dir}/")
+    logger.info(f"\nAntrenare completa. Modele in: {output_dir}/")
 
 
 if __name__ == "__main__":
@@ -365,7 +358,7 @@ if __name__ == "__main__":
     parser.add_argument("--window-seconds", default=5.0, type=float,
                         help="Durata ferestrei de timp in secunde (default: 5, ca main.py)")
     parser.add_argument("--min-attack-packets", default=1, type=int,
-                        help="Prag intensitate: fereastra = atac daca are ≥ N pachete de atac (default: 1)")
+                        help="Prag intensitate: fereastra = atac daca are >= N pachete de atac (default: 1)")
     parser.add_argument("--calibration-csv", default=None,
                         help="CSV cu ferestre normale locale (12 coloane, din calibrate.py) adaugate ca 'normal'")
     parser.add_argument("--calibration-weight", default=3.0, type=float,

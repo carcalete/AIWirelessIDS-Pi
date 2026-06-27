@@ -1,6 +1,5 @@
 """
-calibrate.py — Captura de trafic NORMAL din mediul local, pentru calibrarea modelului
-=====================================================================================
+calibrate.py - Captura de trafic NORMAL din mediul local, pentru calibrarea modelului
 AWID2 e un testbed din 2015; mediul tau real are alt profil de trafic (ex. multe
 beacon-uri de la AP-urile din jur) pe care modelul il poate confunda cu "impersonation"
 -> false positives. Acest tool capteaza trafic normal din mediul tau si salveaza cele
@@ -35,7 +34,7 @@ def main(args):
     sniffer.start()
     logger.info(
         f"Captura NORMALA pe {args.interface}, {args.minutes} min, fereastra {args.window}s.\n"
-        f"!!! NU rula niciun atac acum — trebuie trafic curat !!!"
+        f"!!! NU rula niciun atac acum - trebuie trafic curat !!!"
         if args.label == "normal" else
         f">>> Capturezi exemple de ATAC. Lanseaza atacul ACUM si tine-l pornit <<<"
     )
@@ -79,7 +78,7 @@ def main(args):
         csv.writer(f).writerows(rows)
     flag = "--attack-csv" if is_attack else "--calibration-csv"
     logger.info(
-        f"✓ Salvat {len(rows)} ferestre [{args.label}] in {args.output} "
+        f"Salvat {len(rows)} ferestre [{args.label}] in {args.output} "
         f"({skipped} sarite)."
     )
     logger.info(

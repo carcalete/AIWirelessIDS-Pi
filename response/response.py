@@ -1,5 +1,5 @@
 """
-response.py — Modul de raspuns la intruziuni detectate (raspuns gradat).
+response.py - Modul de raspuns la intruziuni detectate (raspuns gradat).
 
 Niveluri de raspuns:
   - Nivel 1 ALERTARE (mereu): consola + fisier JSONL zilnic.
@@ -66,9 +66,7 @@ class Responder:
         if self._log_dir:
             self._log_dir.mkdir(parents=True, exist_ok=True)
 
-    # ------------------------------------------------------------------
-    # Nivel 2 — Containment evil twin / rogue AP
-    # ------------------------------------------------------------------
+    # Nivel 2 - Containment evil twin / rogue AP
 
     def check_rogue_aps(self, packet_batch: list) -> List[str]:
         """
@@ -99,7 +97,7 @@ class Responder:
         -> clientii conectati la evil twin se deconecteaza de pe el.
         """
         self._contained.add(bssid)
-        logger.warning(f"[CONTAIN] Evil twin '{ssid}' BSSID={bssid} — trimit deauth de containment")
+        logger.warning(f"[CONTAIN] Evil twin '{ssid}' BSSID={bssid} - trimit deauth de containment")
         if not self.interface:
             logger.error("[CONTAIN] interfata lipseste, nu pot injecta.")
             return
@@ -110,13 +108,11 @@ class Responder:
                    Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=bssid, addr3=bssid) /
                    Dot11Deauth(reason=7))
             sendp(pkt, iface=self.interface, count=10, inter=0.1, verbose=False)
-            logger.warning(f"[CONTAIN] {bssid} — 10 cadre deauth trimise.")
+            logger.warning(f"[CONTAIN] {bssid} - 10 cadre deauth trimise.")
         except Exception as e:
             logger.error(f"[CONTAIN] Esec injectare catre {bssid}: {e}")
 
-    # ------------------------------------------------------------------
     # Detectie pe REGULI (atacuri pe care AI-ul nu le poate prinde fara FP)
-    # ------------------------------------------------------------------
 
     def check_flood_rules(self, packet_batch: list) -> List[str]:
         """
@@ -164,9 +160,7 @@ class Responder:
         with open(log_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
 
-    # ------------------------------------------------------------------
     # API public
-    # ------------------------------------------------------------------
 
     def handle(
         self,
@@ -207,9 +201,7 @@ class Responder:
                 pass
         self._blocked.clear()
 
-    # ------------------------------------------------------------------
     # Internals
-    # ------------------------------------------------------------------
 
     def _find_suspects(self, packet_batch: list) -> List[str]:
         """

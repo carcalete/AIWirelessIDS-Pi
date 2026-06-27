@@ -1,5 +1,5 @@
 """
-detection.py — Clasificare trafic WiFi folosind modelul ONNX antrenat.
+detection.py - Clasificare trafic WiFi folosind modelul ONNX antrenat.
 """
 
 import logging
@@ -44,16 +44,16 @@ class Detector:
 
         Decizia se ia pe P(atac) >= prag, NU pe argmax. Asta permite coborarea
         pragului pentru a prinde mai multe atacuri (recall mare / false negatives
-        mici) — un argmax fix la 0.5 ar bloca acest reglaj. Pragul optim se afla
+        mici) - un argmax fix la 0.5 ar bloca acest reglaj. Pragul optim se afla
         cu sweep-ul din evaluate.py (--target-recall).
 
         Args:
-            feature_vector: lista de 21 float-uri produsa de features_to_vector()
+            feature_vector: lista de 12 float-uri produsa de features_to_vector()
 
         Returns:
             (label, prob_atac)
-            label    — "abnormal" daca P(atac) >= prag, altfel "normal"
-            prob_atac — probabilitatea de atac 0.0–1.0 (scorul pe care se decide)
+            label    - "abnormal" daca P(atac) >= prag, altfel "normal"
+            prob_atac - probabilitatea de atac 0.0-1.0 (scorul pe care se decide)
         """
         x = np.array([feature_vector], dtype=np.float32)
         outputs = self._session.run(None, {self._input_name: x})

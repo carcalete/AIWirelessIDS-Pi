@@ -1,10 +1,10 @@
-"""evaluate.py — Evaluare model pe un CSV AWID2 extern (ex: test.csv)"""
+"""evaluate.py - Evaluare model pe un CSV AWID2 extern (ex: test.csv)"""
 import argparse, logging, os, sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
-# train.py se afla in model/ — il adaugam pe path ca evaluate.py sa mearga
+# train.py se afla in model/ - il adaugam pe path ca evaluate.py sa mearga
 # din radacina repo-ului fara PYTHONPATH (`python evaluate.py ...`).
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "model"))
 from train import compute_window_features, assign_time_windows, window_labels, COL_LABEL, MODEL_FEATURES
@@ -15,21 +15,21 @@ logger = logging.getLogger(__name__)
 def main(args):
     logger.info(f"Incarcare: {args.dataset}")
     df = pd.read_csv(args.dataset, header=None, na_values=["?","","  "], low_memory=False)
-    logger.info(f"  → {df.shape[0]:,} pachete")
-    logger.info(f"  → Distributie label:\n{df.iloc[:, COL_LABEL].value_counts().to_string()}")
+    logger.info(f"  -> {df.shape[0]:,} pachete")
+    logger.info(f"  -> Distributie label:\n{df.iloc[:, COL_LABEL].value_counts().to_string()}")
 
     win = args.window_seconds
     df["_win"] = assign_time_windows(df, win)
-    logger.info(f"Grupare in ferestre de timp de {win}s → {df['_win'].nunique():,} ferestre")
+    logger.info(f"Grupare in ferestre de timp de {win}s -> {df['_win'].nunique():,} ferestre")
 
     logger.info("Extragere features...")
     X_df = df.groupby("_win", sort=True).apply(compute_window_features)
     y = window_labels(df, args.min_attack_packets)
-    logger.info(f"  → eticheta abnormal daca ≥{args.min_attack_packets} pachete de atac/fereastra")
+    logger.info(f"  -> eticheta abnormal daca >={args.min_attack_packets} pachete de atac/fereastra")
     X = X_df[MODEL_FEATURES].values.astype(np.float32)
 
     n_normal = int(np.sum(y == 0)); n_abnormal = int(np.sum(y == 1))
-    logger.info(f"  → normal={n_normal:,}  abnormal={n_abnormal:,}")
+    logger.info(f"  -> normal={n_normal:,}  abnormal={n_abnormal:,}")
 
     import onnxruntime as ort
     session = ort.InferenceSession(args.model)
@@ -64,7 +64,7 @@ def threshold_sweep(y, y_prob, target_recall: float):
     y = np.asarray(y); y_prob = np.asarray(y_prob)
     n_pos = int((y == 1).sum())
 
-    logger.info(f"\n{'='*64}\nSweep de prag pe P(atac) — obiectiv: false negatives minim\n{'='*64}")
+    logger.info(f"\n{'='*64}\nSweep de prag pe P(atac) - obiectiv: false negatives minim\n{'='*64}")
     logger.info(f"{'prag':>6} {'TP':>5} {'FP':>5} {'FN':>5} {'TN':>5} "
                 f"{'recall':>8} {'precision':>10} {'F1':>7}")
 
@@ -94,22 +94,22 @@ def threshold_sweep(y, y_prob, target_recall: float):
         ok = [r for r in rows if r[5] >= tgt]
         if ok:
             t, tp, fp, fn, tn, recall, precision, f1 = max(ok, key=lambda r: r[0])
-            logger.info(f"  recall ≥ {tgt:.2f} -> prag={t:.2f} | "
+            logger.info(f"  recall >= {tgt:.2f} -> prag={t:.2f} | "
                         f"recall={recall:.3f} FN={fn} FP={fp} precision={precision:.3f}")
         else:
-            logger.info(f"  recall ≥ {tgt:.2f} -> imposibil de atins cu acest model")
+            logger.info(f"  recall >= {tgt:.2f} -> imposibil de atins cu acest model")
 
     # Pragul pentru tinta ceruta de utilizator (--target-recall)
     ok = [r for r in rows if r[5] >= target_recall]
     if ok:
         t, tp, fp, fn, tn, recall, precision, f1 = max(ok, key=lambda r: r[0])
         logger.info(
-            f"\n>>> Pentru obiectivul tau (recall ≥ {target_recall:.2f}): "
+            f"\n>>> Pentru obiectivul tau (recall >= {target_recall:.2f}): "
             f"ruleaza live cu --threshold {t:.2f}"
             f"\n    (recall={recall:.3f}, FN={fn}, FP={fp}, precision={precision:.3f})"
         )
     else:
-        logger.info(f"\n>>> recall ≥ {target_recall:.2f} nu e atins; cel mai bun recall posibil "
+        logger.info(f"\n>>> recall >= {target_recall:.2f} nu e atins; cel mai bun recall posibil "
                     f"e {max(r[5] for r in rows):.3f}")
 
 
@@ -121,5 +121,5 @@ if __name__ == "__main__":
     p.add_argument("--target-recall", default=0.95, type=float,
                    help="Recall tinta pentru recomandarea pragului (default: 0.95)")
     p.add_argument("--min-attack-packets", default=1, type=int,
-                   help="Prag intensitate: fereastra = atac daca are ≥ N pachete de atac (default: 1)")
+                   help="Prag intensitate: fereastra = atac daca are >= N pachete de atac (default: 1)")
     main(p.parse_args())
